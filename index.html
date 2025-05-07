@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <title>Language Detector</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 50px;
+            background-color: #f2f2f2;
+        }
+        h1 {
+            color: #333;
+        }
+        textarea {
+            width: 100%;
+            height: 100px;
+            font-size: 16px;
+            padding: 10px;
+        }
+        button {
+            margin-top: 10px;
+            padding: 10px 20px;
+            font-size: 16px;
+            background-color: #0078d4;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #005ea2;
+        }
+        .result, .history {
+            margin-top: 20px;
+            font-size: 18px;
+            color: #1a6d1a;
+            white-space: pre-wrap;
+        }
+        ul {
+            margin: 10px 0 0 20px;
+        }
+        li {
+            margin-bottom: 6px;
+        }
+        form {
+            margin-top: 20px;
+        }
+        input[type="file"] {
+            margin-top: 10px;
+            margin-bottom: 10px;
+            padding: 6px;
+            font-size: 16px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Wykrywanie języka tekstu</h1>
+
+    <textarea id="text" placeholder="Wpisz tekst..."></textarea><br>
+    <button onclick="detectLanguage()">Wykryj język</button>
+    <div class="result" id="result"></div>
+
+    <h2>Prześlij plik .txt</h2>
+    <form id="uploadForm">
+        <input type="file" id="fileInput" accept=".txt"><br>
+        <button type="submit">Prześlij i wykryj</button>
+    </form>
+    <div class="result" id="uploadResult"></div>
+
+    <h2>Historia (ostatnie 10)</h2>
+    <div class="history" id="history"></div>
+
+    <script>
+        const langMap = {
+            "pl": "polski",
+            "en": "angielski",
+            "fr": "francuski",
+            "de": "niemiecki",
+            "es": "hiszpański",
+            "it": "włoski",
+            "ru": "rosyjski",
+            "uk": "ukraiński",
+            "ca": "kataloński",
+            "nl": "niderlandzki",
+            "pt": "portugalski",
+            "sv": "szwedzki",
+            "no": "norweski",
+            "fi": "fiński",
+            "da": "duński",
+            "cs": "czeski",
+            "sk": "słowacki",
+            "hu": "węgierski",
+            "ro": "rumuński",
+            "bg": "bułgarski",
+            "tr": "turecki",
+            "el": "grecki",
+            "zh-cn": "chiński (uproszczony)",
+            "zh-tw": "chiński (tradycyjny)",
+            "ja": "japoński",
+            "ko": "koreański",
+            "vi": "wietnamski"
+        };
+
+        function getLangLabel(code) {
+            return `${code} - ${langMap[code] || "nieznany język"}`;
+        }
+
+        async function detectLanguage() {
+            const text = document.getElementById('text').value;
+            const res = await fetch('/detect_language', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ text })
+            });
+            const data = await res.json();
+            const resultEl = document.getElementById('result');
+
+            if (data.error) {
+                resultEl.innerText = 'Błąd: ' + data.error;
+            } else {
+                resultEl.innerHTML =
+                    `<strong>Wykryty język:</strong> <span style="color:#0078D4">${getLangLabel(data.language)}</span><br>` +
+                    `<strong>Kandydaci:</strong><ul>` +
+                    data.candidates.map(c => {
+                        const [code, score] = c.split(":");
+                        return `<li>${getLangLabel(code)} (${parseFloat(score).toFixed(3)})</li>`;
+                    }).join('') +
+                    `</ul>`;
+                loadHistory();
+            }
+        }
+
+        document.getElementById('uploadForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const fileInput = document.getElementById('fileInput');
+            const file = fileInput.files[0];
+            const formData = new FormData();
+            formData.append('file', file);
+
+            const res = await fetch('/upload/', {
+                method: 'POST',
+                body: formData
+            });
+            const data = await res.json();
+            const resultEl = document.getElementById('uploadResult');
+
+            if (data.error) {
+                resultEl.innerText = 'Błąd: ' + data.error;
+            } else {
+                resultEl.innerHTML =
+                    `<strong>Plik:</strong> ${data.filename}<br><strong>Wykryty język:</strong> <span style="color:#0078D4">${getLangLabel(data.language)}</span>`;
+                loadHistory();
+            }
+        });
+
+        async function loadHistory() {
+            const res = await fetch('/history');
+            const data = await res.json();
+            const historyDiv = document.getElementById('history');
+
+            if (data.length === 0) {
+                historyDiv.innerText = 'Brak historii.';
+                return;
+            }
+
+            historyDiv.innerHTML = '<ul>' + data.reverse().map(item => {
+                const time = new Date(item.timestamp).toLocaleString("pl-PL", {
+                    year: "numeric", month: "2-digit", day: "2-digit",
+                    hour: "2-digit", minute: "2-digit", second: "2-digit"
+                });
+                return `<li><span style="color:#555">${time}</span> — 
+                        <b style="color:#0078d4">${getLangLabel(item.language)}</b>: 
+                        ${item.text}</li>`;
+            }).join('') + '</ul>';
+        }
+        loadHistory();
+    </script>
+</body>
+</html>
